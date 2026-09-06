@@ -1,5 +1,6 @@
+#Integrante: Alejandro Molina
+
 import socket
-import dnslib
 from dnslib import QTYPE, DNSRecord, RR, A
 from collections import deque, Counter
 
