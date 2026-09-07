@@ -12,10 +12,7 @@ class HTTPMessage:
     self.body = body
 
 def parse_HTTP_message(http_message):
-  if b"\r\n\r\n" in http_message:
-    head, body = http_message.split(b"\r\n\r\n", 1)
-  else: 
-    head = http_message; body = b""
+  head, body = http_message.split(b"\r\n\r\n", 1)
 
   start_line, headers = head.split(b"\r\n", 1)
   headers = headers.decode()

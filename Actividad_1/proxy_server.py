@@ -15,7 +15,7 @@ from utils import (
 IP_VM = "172.30.153.212"
  
 if __name__ == "__main__":
-  buff_size = 50
+  buff_size = 32
   proxy_address = (IP_VM, 8000)
 
   file_path = sys.argv[1]
