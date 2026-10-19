@@ -1,5 +1,8 @@
 import socket
 import random
+from socketUDP import SocketUDP
+from slidingWindowCC import SlidingWindowCC
+from CongestionControl import CongestionControl
 
 class Segment:
   def __init__(
@@ -34,6 +37,11 @@ class SocketTCP:
     self.segment = None
     self.seq = None
     self.message_left = 0
+    self.congestion_control_on = False 
+    self.congestion_controller = None
+
+  def set_congestion_control(self, status: bool):
+    self.congestion_control_on = status
 
   @staticmethod
   def parse_segment(segment):
@@ -169,7 +177,7 @@ class SocketTCP:
     
     return new_socket, addr
 
-  def send(self, message):
+  def send_stop_and_wait(self, message):
     n = len(message)
     self.socket.settimeout(5)  
 
@@ -238,7 +246,7 @@ class SocketTCP:
       self.seq = seg.seq
     self.socket.settimeout(None)
 
-  def recv(self, buff_size):
+  def recv_stop_and_wait(self, buff_size):
     data = b''
     print(self.socket.getsockname())
     print("LARGO RESTANTE", self.message_left)
@@ -321,7 +329,7 @@ class SocketTCP:
       self.socket.sendto(s_msg, self.connection_addr)
       try:
         self.socket.recvfrom(35)
-      except socket.timeout:
+      except (socket.timeout, ConnectionResetError, OSError):
         pass
       
     self.socket.close()
@@ -357,19 +365,121 @@ class SocketTCP:
 
     self.socket.close()
 
-    
-      
+  def send(self, message, mode="stop_and_wait"):
+    if mode == "stop_and_wait": 
+      self.send_stop_and_wait(message) 
+    elif mode == "go_back_n":
+      self.send_go_back_n(message) 
 
+  def recv(self, buff_size, mode="stop_and_wait"):
+    if mode == "stop_and_wait":
+      return self.recv_stop_and_wait(buff_size) 
+    elif mode == "go_back_n": 
+      return self.recv_go_back_n(buff_size)
 
+  def send_go_back_n(self, message):
+    n = len(message)
+    self.socket.settimeout(0.5)
+    if self.congestion_control_on:
+      MSS = 8
+      if self.congestion_controller is None:
+        self.congestion_controller = CongestionControl(MSS=MSS)
+      window_size = self.congestion_controller.get_MSS_in_cwnd()
+    else:
+      MSS = 16
+      window_size = 8
+    data_list = [message[i:i+MSS] for i in range(0, n, MSS)]
+    seg = Segment(seq=self.seq, message_length=4, LEN=True, data=n.to_bytes(4, "big"))
+    s_msg = self.create_segment(seg)
+    self.socket.sendto(s_msg, self.connection_addr)
+    while True:
+      try: 
+        r_msg, _ = self.socket.recvfrom(35)
+        seg_ack = self.parse_segment(r_msg) 
+        if seg_ack.ACK and seg_ack.seq == self.seq + 4:
+          self.seq = seg_ack.seq 
+          break 
+      except socket.timeout: 
+        self.socket.sendto(s_msg, self.connection_addr)
+    data_window = SlidingWindowCC(window_size, data_list, self.seq)
+    base = 0
+    total_packets = len(data_list)
+    sent_until = 0
+    while base < total_packets:
+      curr_window_size = data_window.window_size 
+      while sent_until < curr_window_size and (base + sent_until) < total_packets:
+        p_data = data_window.get_data(sent_until)
+        p_seq = data_window.get_sequence_number(sent_until) 
+        if p_data is not None and p_seq is not None:
+          seg = Segment(seq=p_seq, message_length=len(p_data), data=p_data)
+          s_msg = self.create_segment(seg)
+          self.socket.sendto(s_msg, self.connection_addr)
+        sent_until += 1
+      try: 
+        r_msg, _ = self.socket.recvfrom(35)
+        seg_ack = self.parse_segment(r_msg) 
+        if seg_ack.ACK:
+          base_seq = data_window.get_sequence_number(0) 
+          if base_seq is not None and seg_ack.seq > base_seq:
+            bytes_advanced = seg_ack.seq - base_seq
+            adv_packets = 0
+            accum = 0
+            for idx in range(curr_window_size):
+              d = data_window.get_data(idx)
+              if d is not None:
+                accum += len(d)
+                adv_packets += 1
+                if accum >= bytes_advanced:
+                  break
+            if adv_packets > 0:
+              if self.congestion_control_on: 
+                self.congestion_controller.event_ack_received()
+              data_window.move_window(adv_packets)
+              base += adv_packets
+              sent_until = max(0, sent_until - adv_packets)
+              if self.congestion_control_on: 
+                new_size = self.congestion_controller.get_MSS_in_cwnd()
+                data_window.update_window_size(new_size)
+      except socket.timeout:
+        if self.congestion_control_on: 
+          self.congestion_controller.event_timeout()
+          new_size = self.congestion_controller.get_MSS_in_cwnd()
+          data_window.update_window_size(new_size) 
+        sent_until = 0
+    self.seq = seg_ack.seq if 'seg_ack' in locals() else self.seq
+    self.socket.settimeout(None)
 
-
-
-    
-
-    
-
-    
-
+  def recv_go_back_n(self, buff_size):
+    data = b''
+    if self.message_left == 0:
+      while True:
+        r_msg, _ = self.socket.recvfrom(35)
+        seg = self.parse_segment(r_msg)
+        if seg.LEN:
+          break
+      length = int.from_bytes(seg.data, byteorder="big")
+      self.message_left = length
+      self.seq = seg.seq + seg.message_length
+      seg_ack = Segment(seq=self.seq, ACK=True)
+      s_msg = self.create_segment(seg_ack)
+      self.socket.sendto(s_msg, self.connection_addr)
+    last_ack_sent = self.seq 
+    while self.message_left > 0 and len(data) < buff_size:
+      r_msg, _ = self.socket.recvfrom(35)
+      seg = self.parse_segment(r_msg)
+      if seg.seq == self.seq:
+        self.seq = seg.seq + seg.message_length
+        self.message_left -= seg.message_length
+        data += seg.data 
+        last_ack_sent = self.seq
+        seg_ack = Segment(seq=self.seq, ACK=True)
+        s_msg = self.create_segment(seg_ack)
+        self.socket.sendto(s_msg, self.connection_addr)
+      else:
+        seg_ack = Segment(seq=last_ack_sent, ACK=True)
+        s_msg = self.create_segment(seg_ack)
+        self.socket.sendto(s_msg, self.connection_addr)
+    return data
 
   def set_peso(self, peso):
     self.peso = peso
