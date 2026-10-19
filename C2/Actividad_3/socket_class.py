@@ -1,6 +1,12 @@
 import socket
 import random
 
+DEBUG = True
+
+def d_print(*args, **kwargs):
+  if DEBUG: 
+    print(*args, **kwargs)
+
 class Segment:
   def __init__(
       self,
@@ -37,7 +43,6 @@ class SocketTCP:
 
   @staticmethod
   def parse_segment(segment):
-    print("source =", segment[0:2])
     source = int.from_bytes(segment[0:2], "big")
     destination = int.from_bytes(segment[2:4], "big")
     seq = int.from_bytes(segment[4:8], "big")
@@ -50,20 +55,6 @@ class SocketTCP:
     LEN = bool(segment[17])
 
     data = segment[18:]
-
-    print("RECIBIDO")
-    print("source =", source)
-    print("destination =", destination)
-    print("seq =", seq)
-    print("ack_num =", ack_num)
-    print("message_length =", message_length)
-    print("ACK =", ACK)
-    print("SYN =", SYN)
-    print("FIN =", FIN)
-    print("LEN =", LEN)
-    print("data =", data)
-    print("")
-    print("")
 
     new_segment = Segment(
           source=source,
@@ -96,10 +87,7 @@ class SocketTCP:
       ]),
       segment.data
     ])
-
-    print("Enviado")
-    print(segment_bytes)
-    
+  
     return segment_bytes
   
   def bind(self, address):
@@ -107,6 +95,7 @@ class SocketTCP:
     self.socket.bind(address)
 
   def connect(self, address):
+    d_print(f"Conectando con {address[0]}:{address[1]}")
     self.socket.settimeout(5)
     self.seq = random.randint(0, 100)
     seg = Segment(
@@ -121,8 +110,10 @@ class SocketTCP:
         r_msg, address = self.socket.recvfrom(35)  
         seg = self.parse_segment(r_msg)
         if seg.SYN and seg.ACK and seg.seq == self.seq + 1:
+          d_print("SYN + ACK recibido")
           break
       except socket.timeout:
+        d_print("No se ha recibido mensaje SYN + ACK, reintentando...")
         self.socket.sendto(s_msg, address)
 
     self.seq = self.seq + 2
@@ -135,12 +126,14 @@ class SocketTCP:
     self.socket.sendto(s_msg, address)
     self.connection_addr = new_addr
     self.socket.settimeout(None)
+    d_print("Conexión establecida")
 
   def accept(self):
     while True:
       r_msg, addr = self.socket.recvfrom(35)
       seg = self.parse_segment(r_msg)
       if seg.SYN:
+        d_print(f"Recibido SYN desde {addr[0]}:{addr[1]}")
         break
   
     self.seq = seg.seq+1
@@ -165,8 +158,10 @@ class SocketTCP:
       seg = self.parse_segment(r_msg)
       if (seg.ACK or seg.LEN) and seg.seq == self.seq+1:
         break
+      d_print("Mensaje incorrecto recibido, reintentando...")
       self.socket.sendto(s_msg, addr)
-    
+
+    d_print("Conexión establecida")
     return new_socket, addr
 
   def send(self, message):
@@ -181,9 +176,7 @@ class SocketTCP:
       data=n.to_bytes(4, "big")
     )
     s_msg = self.create_segment(seg)
-    print("enviando mensaje a ", self.connection_addr)
     self.socket.sendto(s_msg, self.connection_addr)
-    print(self.socket.getsockname())
     while True:
       try:
         r_msg, _ = self.socket.recvfrom(35)
@@ -191,6 +184,7 @@ class SocketTCP:
         if seg.ACK and seg.seq == self.seq+4:
           break
       except socket.timeout:
+        d_print("Timeout o mensaje/secuencia incorrecta, reintentando...")
         self.socket.sendto(s_msg, self.connection_addr)
 
         
@@ -213,6 +207,7 @@ class SocketTCP:
           if seg.ACK and seg.seq == self.seq+16:
             break
         except socket.timeout:
+          d_print("Timeout o mensaje/secuencia incorrecta, reintentando...")
           self.socket.sendto(s_msg, self.connection_addr)
       
       self.seq = seg.seq
@@ -233,23 +228,24 @@ class SocketTCP:
           if seg.ACK and seg.seq == self.seq+len(data):
             break
         except socket.timeout:
+          d_print("Timeout o mensaje/secuencia incorrecta, reintentando...")
           self.socket.sendto(s_msg, self.connection_addr)
 
       self.seq = seg.seq
+    d_print("Mensaje completo enviado")
     self.socket.settimeout(None)
 
   def recv(self, buff_size):
+    d_print("Esperando mensaje...")
     data = b''
-    print(self.socket.getsockname())
-    print("LARGO RESTANTE", self.message_left)
 
     if self.message_left == 0:
-      print("NO  while")
       while True:  
         r_msg, _ = self.socket.recvfrom(35)
         seg = self.parse_segment(r_msg)
         if seg.LEN:
           break
+        d_print("Mensaje incorrecto recibido")
         
       length = int.from_bytes(seg.data, byteorder="big")
       self.message_left = length
@@ -263,19 +259,17 @@ class SocketTCP:
       self.socket.sendto(s_msg, self.connection_addr)
 
     while buff_size > 0:
-      print("en el while")
       while True:
         r_msg, _ = self.socket.recvfrom(35)
         seg = self.parse_segment(r_msg)
         if seg.seq == self.seq:
           break
-        #Reenvía el último mensaje
+        d_print("Secuencia incorrecta recibida, reenviando ACK...")
         self.socket.sendto(s_msg, self.connection_addr)
 
       self.seq = seg.seq + seg.message_length
       buff_size -= 16
       self.message_left -= seg.message_length
-      print("LARGO RESTANTE", self.message_left)
       data += seg.data
 
       seg = Segment(
@@ -285,10 +279,11 @@ class SocketTCP:
       s_msg = self.create_segment(seg)
       self.socket.sendto(s_msg, self.connection_addr)
 
-    print("retornar")
+    d_print("Mensaje completo recibido")
     return data
 
   def close(self):
+    d_print("Cerrando conexión")
     self.socket.settimeout(5)
     seg = Segment(
       seq=self.seq,
@@ -308,7 +303,9 @@ class SocketTCP:
         intentos += 1
         if intentos == 3:
           self.socket.close()
+          d_print(f"Intento {intentos} fallido, conexión cerrada")
           return
+        d_print(f"Intento {intentos} fallido, reintentando...")
         self.socket.sendto(s_msg, self.connection_addr)
 
     self.seq += 2
@@ -318,20 +315,24 @@ class SocketTCP:
             )
     s_msg = self.create_segment(seg)
     for i in range(3):
+      d_print(f"Enviando ACK final {i}")
       self.socket.sendto(s_msg, self.connection_addr)
       try:
         self.socket.recvfrom(35)
       except socket.timeout:
         pass
-      
+
+    d_print("Conexión cerrada")
     self.socket.close()
 
   def recv_close(self):
+    d_print("Esperanco cierre de conexión")
     while True:
       r_msg, _ = self.socket.recvfrom(35)
       seg = self.parse_segment(r_msg)
       if seg.FIN:
         break
+      d_print("Mensaje incorrecto recibido")
 
     self.socket.settimeout(5)
     self.seq = seg.seq + 1
@@ -344,53 +345,19 @@ class SocketTCP:
     s_msg = self.create_segment(seg)
     self.socket.sendto(s_msg, self.connection_addr)
 
+    d_print("Esperando ACK final...")
     intentos = 0
     while intentos < 3:
       try:
         r_msg, _ = self.socket.recvfrom(35)
         seg = self.parse_segment(r_msg)
         if seg.ACK and seg.seq == self.seq+1:
-          print("terminó")
           break
       except socket.timeout:
         intentos += 1
+        d_print(f"Timeout {intentos} terminado, reintentando...")
 
+    d_print("Conexión cerrada")
     self.socket.close()
 
-    
-      
 
-
-
-
-
-    
-
-    
-
-    
-
-
-  def set_peso(self, peso):
-    self.peso = peso
-
-  def set_mala_mascota(self):
-    print("No, no hay mascotas malas, me niego")
-
-  def is_buena_mascota(self):
-    return self.buena_mascota
-
-  def is_chonky(self):
-    if self.especie == "gato":
-      if self.tamanno == "smol":
-        if self.peso > 5:
-          return "está chonky"
-        else:
-          return "no está chonky"
-      else:
-        if self.peso > 7:
-          return "está chonky"
-        else:
-          return "no está chonky"
-    else:
-      return "la verdad es que ni idea, esto es un ejemplo chiquito"
