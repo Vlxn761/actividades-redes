@@ -177,7 +177,7 @@ class SocketTCP:
     
     return new_socket, addr
 
-  def send_stop_and_wait(self, message):
+  def send_using_stop_and_wait(self, message):
     n = len(message)
     self.socket.settimeout(5)  
 
@@ -246,7 +246,7 @@ class SocketTCP:
       self.seq = seg.seq
     self.socket.settimeout(None)
 
-  def recv_stop_and_wait(self, buff_size):
+  def recv_using_stop_and_wait(self, buff_size):
     data = b''
     print(self.socket.getsockname())
     print("LARGO RESTANTE", self.message_left)
@@ -367,17 +367,17 @@ class SocketTCP:
 
   def send(self, message, mode="stop_and_wait"):
     if mode == "stop_and_wait": 
-      self.send_stop_and_wait(message) 
+      self.send_using_stop_and_wait(message) 
     elif mode == "go_back_n":
-      self.send_go_back_n(message) 
+      self.send_using_go_back_n(message) 
 
   def recv(self, buff_size, mode="stop_and_wait"):
     if mode == "stop_and_wait":
-      return self.recv_stop_and_wait(buff_size) 
+      return self.recv_using_stop_and_wait(buff_size) 
     elif mode == "go_back_n": 
-      return self.recv_go_back_n(buff_size)
+      return self.recv_using_go_back_n(buff_size)
 
-  def send_go_back_n(self, message):
+  def send_using_go_back_n(self, message):
     n = len(message)
     self.socket.settimeout(0.5)
     if self.congestion_control_on:
@@ -440,16 +440,18 @@ class SocketTCP:
               if self.congestion_control_on: 
                 new_size = self.congestion_controller.get_MSS_in_cwnd()
                 data_window.update_window_size(new_size)
+                print(f"[DEBUG ACK] cwnd: {self.congestion_controller.cwnd} bytes ({new_size} MSS) | Estado: {self.congestion_controller.current_state}")
       except socket.timeout:
         if self.congestion_control_on: 
           self.congestion_controller.event_timeout()
           new_size = self.congestion_controller.get_MSS_in_cwnd()
-          data_window.update_window_size(new_size) 
+          data_window.update_window_size(new_size)
+          print(f"[DEBUG TIMEOUT] ssthresh: {self.congestion_controller.ssthresh} bytes | cwnd: {self.congestion_controller.cwnd} bytes | Estado: {self.congestion_controller.current_state}")
         sent_until = 0
     self.seq = seg_ack.seq if 'seg_ack' in locals() else self.seq
     self.socket.settimeout(None)
 
-  def recv_go_back_n(self, buff_size):
+  def recv_using_go_back_n(self, buff_size):
     data = b''
     if self.message_left == 0:
       while True:
