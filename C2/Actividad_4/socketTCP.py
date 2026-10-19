@@ -10,7 +10,6 @@ class Segment:
       source: int = 5000,
       destination: int = 5000,
       seq: int = 0,
-      ack_num: int = 0,
       message_length: int = 0,
       ACK: bool = False,
       SYN: bool = False,
@@ -21,7 +20,6 @@ class Segment:
     self.source = source
     self.destination = destination
     self.seq = seq
-    self.ack_num = ack_num
     self.message_length = message_length
     self.ACK = ACK
     self.SYN = SYN
@@ -49,21 +47,19 @@ class SocketTCP:
     source = int.from_bytes(segment[0:2], "big")
     destination = int.from_bytes(segment[2:4], "big")
     seq = int.from_bytes(segment[4:8], "big")
-    ack_num = int.from_bytes(segment[8:12], "big")
-    message_length = int.from_bytes(segment[12:14], "big")
+    message_length = int.from_bytes(segment[8:10], "big")
 
-    ACK = bool(segment[14])
-    SYN = bool(segment[15]) 
-    FIN = bool(segment[16])
-    LEN = bool(segment[17])
+    ACK = bool(segment[10])
+    SYN = bool(segment[11]) 
+    FIN = bool(segment[12])
+    LEN = bool(segment[13])
 
-    data = segment[18:]
+    data = segment[14:]
 
     print("RECIBIDO")
     print("source =", source)
     print("destination =", destination)
     print("seq =", seq)
-    print("ack_num =", ack_num)
     print("message_length =", message_length)
     print("ACK =", ACK)
     print("SYN =", SYN)
@@ -77,7 +73,6 @@ class SocketTCP:
           source=source,
           destination=destination,
           seq=seq,
-          ack_num=ack_num,
           message_length=message_length,
           ACK=ACK,
           SYN=SYN,
@@ -94,7 +89,6 @@ class SocketTCP:
       segment.source.to_bytes(2, "big"),
       segment.destination.to_bytes(2, "big"),
       segment.seq.to_bytes(4, "big"),
-      segment.ack_num.to_bytes(4, "big"),
       segment.message_length.to_bytes(2, "big"),
       bytes([
         segment.ACK,
