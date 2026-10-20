@@ -334,6 +334,10 @@ class SocketTCP:
       seg = self.parse_segment(r_msg)
       if seg.FIN:
         break
+      else:
+        seg_ack = Segment(seq=self.seq, ACK=True) 
+        s_msg = self.create_segment(seg_ack)
+        self.socket.sendto(s_msg, self.connection_addr)
 
     self.socket.settimeout(5)
     self.seq = seg.seq + 1
@@ -453,6 +457,10 @@ class SocketTCP:
         seg = self.parse_segment(r_msg)
         if seg.LEN:
           break
+        else:
+          seg_ack = Segment(seq=self.seq, ACK=True)
+          s_msg = self.create_segment(seg_ack)
+          self.socket.sendto(s_msg, self.connection_addr)
       length = int.from_bytes(seg.data, byteorder="big")
       self.message_left = length
       self.seq = seg.seq + seg.message_length
