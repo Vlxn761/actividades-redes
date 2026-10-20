@@ -35,7 +35,6 @@ class SocketTCP:
     self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     self.address = None
     self.connection_addr = None
-    self.segment = None
     self.seq = None
     self.message_left = 0
 
