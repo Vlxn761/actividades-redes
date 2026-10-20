@@ -1,4 +1,4 @@
-import C2.Actividad_4.socketTCP as SocketTCP
+import socketTCP as SocketTCP
 
 address = ('localhost', 5000)
 
