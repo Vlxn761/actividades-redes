@@ -10,8 +10,8 @@ def d_print(*args, **kwargs):
 class Segment:
   def __init__(
       self,
-      source: int = 5000,
-      destination: int = 5000,
+      source: int = 8000,
+      destination: int = 8000,
       seq: int = 0,
       message_length: int = 0,
       ACK: bool = False,
@@ -252,7 +252,7 @@ class SocketTCP:
       s_msg = self.create_segment(seg)
       self.socket.sendto(s_msg, self.connection_addr)
 
-    while buff_size > 0:
+    while buff_size > 0 and self.message_left > 0:
       while True:
         r_msg, _ = self.socket.recvfrom(35)
         seg = self.parse_segment(r_msg)
