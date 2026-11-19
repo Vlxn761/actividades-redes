@@ -1,6 +1,6 @@
 import sys
 import socket
-from utils import parse_packet, create_packet, Headers
+from utils import parse_packet, create_packet, IPPacket
 
 if __name__ == "__main__":
   headers = sys.argv[1]
@@ -12,10 +12,10 @@ if __name__ == "__main__":
   with open("archivo.txt", "r") as file:
       for line in file:
         data = line.encode()
-        msg = Headers(
+        msg = IPPacket(
           IP=IP_final,
-          port=puerto_final,
-          TTL=TTL,
+          port=int(puerto_final),
+          TTL=int(TTL),
           data=data
         )
         msg = create_packet(msg)

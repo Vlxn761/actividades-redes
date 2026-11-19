@@ -1,4 +1,4 @@
-class Headers:
+class IPPacket:
   def __init__(
       self,
       IP: str,
@@ -15,23 +15,23 @@ def parse_packet(IP_packet):
   IP = IP_packet[0:4]
   IP = ".".join(str(b) for b in IP)
   port = int.from_bytes(IP_packet[4:6], byteorder="big")
-  TTL = int.from_bytes(IP_packet[6], byteorder="big")
+  TTL = IP_packet[6]
   data = IP_packet[7:]
 
-  headers = Headers(
+  IPPacket = IPPacket(
         IP=IP, 
         port=port,
         TTL=TTL,
         data=data
         )
   
-  return headers
+  return IPPacket
 
 def create_packet(parsed_IP_packet):
   IP = parsed_IP_packet.IP
   IP = bytes(int(n) for n in IP.split("."))
   port = parsed_IP_packet.port.to_bytes(2, byteorder="big")
-  TTL = parsed_IP_packet.TLL.to_bytes(1, byteorder="big")
+  TTL = parsed_IP_packet.TTL.to_bytes(1, byteorder="big")
   data = parsed_IP_packet.data
   return IP + port + TTL + data
 

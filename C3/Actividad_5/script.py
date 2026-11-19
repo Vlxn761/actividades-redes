@@ -1,5 +1,5 @@
 import socket
-from utils import parse_packet, create_packet, Headers
+from utils import parse_packet, create_packet, IPPacket
 
 if __name__ == "__main__":
   IP_final, puerto_final = input("Dirección final: IP puerto ").split()
@@ -7,9 +7,10 @@ if __name__ == "__main__":
   dir_envio = (IP_envio, int(puerto_envio))
   data = input("Mensaje: ").encode()
   
-  msg = Headers(
+  msg = IPPacket(
     IP=IP_final,
     port=int(puerto_final),
+    TTL=10,
     data=data
   )
 

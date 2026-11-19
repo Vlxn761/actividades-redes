@@ -15,9 +15,11 @@ if __name__ == "__main__":
     while True:
       msg, paquete_ip = router_socket.recvfrom(1024)
       msg = parse_packet(msg)
+
       if msg.TTL <= 0:
          print(f"Se recibió paquete {paquete_ip} con TTL 0")
-         break
+         continue
+      
       msg.TTL -= 1
       destination_address = (msg.IP, msg.port)
       if destination_address == router_address:
